@@ -1,0 +1,41 @@
+{
+  "name": "rag-js",
+  "version": "1.0.0",
+  "description": "A RAG (Retrieval-Augmented Generation) package that integrates multiple data sources (CSV, Database, Pinecone) with Groq LLM for intelligent Q&A",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node --test tests/"
+  },
+  "keywords": [
+    "rag",
+    "retrieval-augmented-generation",
+    "groq",
+    "llm",
+    "ai",
+    "csv",
+    "pinecone",
+    "vector-database",
+    "embeddings",
+    "question-answering"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "better-sqlite3": "^11.6.0",
+    "csv-parse": "^5.5.6",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
+    "groq-sdk": "^0.8.0",
+    "pg": "^8.13.1",
+    "@pinecone-database/pinecone": "^4.0.0",
+    "vectra": "^0.9.0"
+  },
+  "devDependencies": {},
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
+
