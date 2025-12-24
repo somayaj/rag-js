@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RAG-JS | Knowledge Query Interface</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Outfit', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            midnight: '#0a0a0f',
+            ink: '#12121a',
+            slate: '#1a1a2e',
+            mist: '#2a2a40',
+            silver: '#8892b0',
+            pearl: '#ccd6f6',
+            snow: '#e6f1ff',
+            ember: '#ff6b35',
+            coral: '#ff8c61',
+            teal: '#64ffda',
+            azure: '#57cbff',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      background: linear-gradient(135deg, #0a0a0f 0%, #12121a 50%, #1a1a2e 100%);
+    }
+    .glass {
+      background: rgba(26, 26, 46, 0.6);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(100, 255, 218, 0.1);
+    }
+    .glow-border {
+      box-shadow: 0 0 20px rgba(100, 255, 218, 0.1), inset 0 0 20px rgba(100, 255, 218, 0.05);
+    }
+    .text-gradient {
+      background: linear-gradient(135deg, #64ffda 0%, #57cbff 50%, #ff6b35 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .source-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px rgba(100, 255, 218, 0.15);
+    }
+    .typing-indicator span {
+      animation: blink 1.4s infinite both;
+    }
+    .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+    .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes blink {
+      0%, 60%, 100% { opacity: 0.3; }
+      30% { opacity: 1; }
+    }
+    .fade-in {
+      animation: fadeIn 0.4s ease-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .pulse-ring {
+      animation: pulse-ring 2s cubic-bezier(0.455, 0.03, 0.515, 0.955) infinite;
+    }
+    @keyframes pulse-ring {
+      0% { transform: scale(0.8); opacity: 0.5; }
+      50% { transform: scale(1); opacity: 0.3; }
+      100% { transform: scale(0.8); opacity: 0.5; }
+    }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #2a2a40; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #3a3a50; }
+  </style>
+</head>
+<body class="min-h-screen text-pearl font-sans">
+  <!-- Ambient Background -->
+  <div class="fixed inset-0 overflow-hidden pointer-events-none">
+    <div class="absolute top-1/4 -left-32 w-96 h-96 bg-teal/5 rounded-full blur-3xl pulse-ring"></div>
+    <div class="absolute bottom-1/4 -right-32 w-96 h-96 bg-ember/5 rounded-full blur-3xl pulse-ring" style="animation-delay: 1s;"></div>
+  </div>
+
+  <div class="relative z-10 flex flex-col h-screen max-w-6xl mx-auto px-4 py-6">
+    <!-- Header -->
+    <header class="flex items-center justify-between mb-6">
+      <div class="flex items-center gap-4">
+        <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-teal to-azure flex items-center justify-center">
+          <svg class="w-6 h-6 text-midnight" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-2xl font-bold text-gradient">RAG-JS</h1>
+          <p class="text-sm text-silver">Knowledge Query Interface</p>
+        </div>
+      </div>
+      <div id="status-badge" class="flex items-center gap-2 px-4 py-2 rounded-full glass">
+        <span class="w-2 h-2 rounded-full bg-silver animate-pulse" id="status-dot"></span>
+        <span class="text-sm text-silver font-mono" id="status-text">Connecting...</span>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex gap-6 min-h-0">
+      <!-- Chat Panel -->
+      <div class="flex-1 flex flex-col glass rounded-2xl glow-border overflow-hidden">
+        <!-- Messages -->
+        <div id="messages" class="flex-1 overflow-y-auto p-6 space-y-6">
+          <!-- Welcome Message -->
+          <div class="text-center py-12 fade-in">
+            <div class="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-teal/20 to-azure/20 mb-6">
+              <svg class="w-10 h-10 text-teal" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+              </svg>
+            </div>
+            <h2 class="text-xl font-semibold text-snow mb-2">Ask anything about your data</h2>
+            <p class="text-silver max-w-md mx-auto">
+              I'll search through your documents and provide intelligent answers powered by Groq's lightning-fast LLM.
+            </p>
+          </div>
+        </div>
+
+        <!-- Input Area -->
+        <div class="p-4 border-t border-mist/50">
+          <form id="query-form" class="flex gap-3">
+            <div class="flex-1 relative">
+              <input 
+                type="text" 
+                id="query-input"
+                placeholder="Ask a question about your data..."
+                class="w-full px-5 py-4 bg-ink/80 border border-mist rounded-xl text-snow placeholder-silver/50 focus:outline-none focus:border-teal/50 focus:ring-2 focus:ring-teal/20 transition-all font-light"
+                autocomplete="off"
+              >
+            </div>
+            <button 
+              type="submit"
+              id="submit-btn"
+              class="px-6 py-4 bg-gradient-to-r from-teal to-azure text-midnight font-semibold rounded-xl hover:opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              <span>Ask</span>
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+              </svg>
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Sources Panel -->
+      <div class="w-80 flex flex-col glass rounded-2xl glow-border overflow-hidden">
+        <div class="p-4 border-b border-mist/50">
+          <h3 class="font-semibold text-snow flex items-center gap-2">
+            <svg class="w-5 h-5 text-ember" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+            Sources
+          </h3>
+        </div>
+        <div id="sources" class="flex-1 overflow-y-auto p-4 space-y-3">
+          <div class="text-center py-8 text-silver/60">
+            <svg class="w-12 h-12 mx-auto mb-3 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+            </svg>
+            <p class="text-sm">Sources will appear here</p>
+          </div>
+        </div>
+        
+        <!-- Stats -->
+        <div id="stats-panel" class="p-4 border-t border-mist/50 bg-ink/30">
+          <div class="grid grid-cols-2 gap-3 text-center">
+            <div>
+              <div class="text-2xl font-bold text-teal font-mono" id="doc-count">-</div>
+              <div class="text-xs text-silver">Documents</div>
+            </div>
+            <div>
+              <div class="text-2xl font-bold text-ember font-mono" id="top-k">-</div>
+              <div class="text-xs text-silver">Top-K</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="mt-4 text-center text-silver/40 text-sm">
+      Powered by <span class="text-teal">Groq</span> • Built with <span class="text-ember">RAG-JS</span>
+    </footer>
+  </div>
+
+  <script>
+    const API_BASE = window.location.origin;
+    
+    // DOM Elements
+    const form = document.getElementById('query-form');
+    const input = document.getElementById('query-input');
+    const submitBtn = document.getElementById('submit-btn');
+    const messagesEl = document.getElementById('messages');
+    const sourcesEl = document.getElementById('sources');
+    const statusDot = document.getElementById('status-dot');
+    const statusText = document.getElementById('status-text');
+    const docCountEl = document.getElementById('doc-count');
+    const topKEl = document.getElementById('top-k');
+
+    // Check API status
+    async function checkStatus() {
+      try {
+        const res = await fetch(`${API_BASE}/stats`);
+        if (res.ok) {
+          const stats = await res.json();
+          statusDot.className = 'w-2 h-2 rounded-full bg-teal';
+          statusText.textContent = `${stats.documentCount} docs indexed`;
+          docCountEl.textContent = stats.documentCount;
+          topKEl.textContent = stats.topK;
+        } else {
+          throw new Error('API error');
+        }
+      } catch (e) {
+        statusDot.className = 'w-2 h-2 rounded-full bg-ember';
+        statusText.textContent = 'Disconnected';
+      }
+    }
+
+    // Create message bubble
+    function createMessage(content, isUser = false) {
+      const wrapper = document.createElement('div');
+      wrapper.className = `flex ${isUser ? 'justify-end' : 'justify-start'} fade-in`;
+      
+      const bubble = document.createElement('div');
+      bubble.className = isUser 
+        ? 'max-w-[80%] px-5 py-3 rounded-2xl rounded-br-md bg-gradient-to-r from-teal/20 to-azure/20 border border-teal/30 text-snow'
+        : 'max-w-[80%] px-5 py-3 rounded-2xl rounded-bl-md bg-mist/50 border border-mist text-pearl';
+      
+      if (typeof content === 'string') {
+        bubble.innerHTML = formatMarkdown(content);
+      } else {
+        bubble.appendChild(content);
+      }
+      
+      wrapper.appendChild(bubble);
+      return wrapper;
+    }
+
+    // Create typing indicator
+    function createTypingIndicator() {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'flex justify-start fade-in';
+      wrapper.id = 'typing-indicator';
+      
+      const bubble = document.createElement('div');
+      bubble.className = 'px-5 py-4 rounded-2xl rounded-bl-md bg-mist/50 border border-mist typing-indicator flex gap-1';
+      bubble.innerHTML = '<span class="w-2 h-2 rounded-full bg-teal"></span><span class="w-2 h-2 rounded-full bg-teal"></span><span class="w-2 h-2 rounded-full bg-teal"></span>';
+      
+      wrapper.appendChild(bubble);
+      return wrapper;
+    }
+
+    // Format basic markdown
+    function formatMarkdown(text) {
+      return text
+        .replace(/\*\*(.*?)\*\*/g, '<strong class="text-snow">$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        .replace(/`(.*?)`/g, '<code class="px-1.5 py-0.5 bg-ink rounded text-teal font-mono text-sm">$1</code>')
+        .replace(/\n/g, '<br>');
+    }
+
+    // Create source card
+    function createSourceCard(source, index) {
+      const card = document.createElement('div');
+      card.className = 'source-card p-3 rounded-xl bg-ink/50 border border-mist hover:border-teal/30 transition-all cursor-pointer';
+      
+      const score = Math.round(source.score * 100);
+      const scoreColor = score > 70 ? 'text-teal' : score > 40 ? 'text-azure' : 'text-silver';
+      
+      card.innerHTML = `
+        <div class="flex items-start justify-between gap-2 mb-2">
+          <span class="text-xs font-mono text-silver/60">#${index + 1}</span>
+          <span class="text-xs font-mono ${scoreColor}">${score}%</span>
+        </div>
+        <h4 class="text-sm font-medium text-snow mb-1 line-clamp-1">${source.metadata?.title || 'Document'}</h4>
+        <p class="text-xs text-silver/70 line-clamp-2">${source.content}</p>
+        ${source.metadata?.category ? `<span class="inline-block mt-2 px-2 py-0.5 text-xs rounded-full bg-ember/20 text-ember">${source.metadata.category}</span>` : ''}
+      `;
+      
+      return card;
+    }
+
+    // Update sources panel
+    function updateSources(sources) {
+      if (!sources || sources.length === 0) {
+        sourcesEl.innerHTML = `
+          <div class="text-center py-8 text-silver/60">
+            <p class="text-sm">No relevant sources found</p>
+          </div>
+        `;
+        return;
+      }
+      
+      sourcesEl.innerHTML = '';
+      sources.forEach((source, index) => {
+        sourcesEl.appendChild(createSourceCard(source, index));
+      });
+    }
+
+    // Clear welcome message
+    function clearWelcome() {
+      const welcome = messagesEl.querySelector('.text-center');
+      if (welcome) welcome.remove();
+    }
+
+    // Handle form submission
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const query = input.value.trim();
+      if (!query) return;
+      
+      clearWelcome();
+      
+      // Add user message
+      messagesEl.appendChild(createMessage(query, true));
+      input.value = '';
+      submitBtn.disabled = true;
+      
+      // Add typing indicator
+      const typingIndicator = createTypingIndicator();
+      messagesEl.appendChild(typingIndicator);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+      
+      try {
+        const res = await fetch(`${API_BASE}/query`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query })
+        });
+        
+        if (!res.ok) throw new Error('Query failed');
+        
+        const data = await res.json();
+        
+        // Remove typing indicator
+        typingIndicator.remove();
+        
+        // Add response
+        messagesEl.appendChild(createMessage(data.answer));
+        
+        // Update sources
+        updateSources(data.sources);
+        
+      } catch (error) {
+        typingIndicator.remove();
+        messagesEl.appendChild(createMessage('Sorry, something went wrong. Please check if the server is running.'));
+      }
+      
+      submitBtn.disabled = false;
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    });
+
+    // Keyboard shortcut
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        form.dispatchEvent(new Event('submit'));
+      }
+    });
+
+    // Initialize
+    checkStatus();
+    setInterval(checkStatus, 30000);
+    input.focus();
+  </script>
+</body>
+</html>
+
