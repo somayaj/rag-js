@@ -9,7 +9,11 @@ node_modules/
 # Data files (keep sample)
 data/*.sqlite
 data/*.db
+data/*.pdf
+data/*.xlsx
+data/*.xls
 !data/sample.csv
+!data/ml.txt
 
 # Logs
 logs/
