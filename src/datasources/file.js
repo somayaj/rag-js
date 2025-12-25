@@ -8,6 +8,7 @@ import { BaseDataSource } from './base.js';
  * File Data Source
  * Loads and indexes multiple file types: CSV, TXT, PDF, XLS/XLSX
  * Can load all files from a directory
+ * Supports auto-refresh when files change
  */
 export class FileDataSource extends BaseDataSource {
   constructor(config = {}) {
@@ -17,7 +18,12 @@ export class FileDataSource extends BaseDataSource {
     this.extensions = config.extensions || ['.csv', '.txt', '.pdf', '.xlsx', '.xls', '.json', '.md'];
     this.chunkSize = config.chunkSize || 1000; // Characters per chunk for large files
     this.chunkOverlap = config.chunkOverlap || 200; // Overlap between chunks
+    this.watch = config.watch ?? false; // Enable file watching
+    this.watchDebounce = config.watchDebounce || 2000; // Debounce time in ms
     this.documents = [];
+    this.watcher = null;
+    this.onRefresh = config.onRefresh || null; // Callback when files are refreshed
+    this._refreshTimeout = null;
   }
 
   async initialize() {
@@ -361,8 +367,89 @@ export class FileDataSource extends BaseDataSource {
     return {
       totalDocuments: this.documents.length,
       byType,
-      byFile
+      byFile,
+      watching: !!this.watcher
     };
+  }
+
+  /**
+   * Start watching for file changes
+   */
+  async startWatching() {
+    if (this.watcher) {
+      return; // Already watching
+    }
+
+    try {
+      const chokidar = (await import('chokidar')).default;
+      
+      // Build glob patterns for watched extensions
+      const patterns = this.extensions.map(ext => 
+        this.recursive 
+          ? join(this.path, '**', `*${ext}`)
+          : join(this.path, `*${ext}`)
+      );
+
+      this.watcher = chokidar.watch(patterns, {
+        persistent: true,
+        ignoreInitial: true,
+        awaitWriteFinish: {
+          stabilityThreshold: 1000,
+          pollInterval: 100
+        }
+      });
+
+      const handleChange = (eventType, filePath) => {
+        // Debounce refreshes
+        if (this._refreshTimeout) {
+          clearTimeout(this._refreshTimeout);
+        }
+        
+        this._refreshTimeout = setTimeout(async () => {
+          console.log(`📁 File ${eventType}: ${basename(filePath)}, refreshing index...`);
+          const oldCount = this.documents.length;
+          await this.loadDocuments();
+          const newCount = this.documents.length;
+          console.log(`✅ Index refreshed: ${oldCount} → ${newCount} documents`);
+          
+          if (this.onRefresh) {
+            this.onRefresh(this.documents.length, eventType, filePath);
+          }
+        }, this.watchDebounce);
+      };
+
+      this.watcher
+        .on('add', (path) => handleChange('added', path))
+        .on('change', (path) => handleChange('changed', path))
+        .on('unlink', (path) => handleChange('removed', path));
+
+      console.log(`👁️  Watching for file changes in ${this.path}`);
+    } catch (error) {
+      if (error.code === 'ERR_MODULE_NOT_FOUND') {
+        console.warn('Warning: chokidar not installed. File watching disabled. Install with: npm install chokidar');
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  /**
+   * Stop watching for file changes
+   */
+  async stopWatching() {
+    if (this.watcher) {
+      await this.watcher.close();
+      this.watcher = null;
+      console.log('👁️  Stopped watching for file changes');
+    }
+  }
+
+  /**
+   * Close the data source and stop watching
+   */
+  async close() {
+    await this.stopWatching();
+    await super.close();
   }
 }
 

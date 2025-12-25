@@ -33,12 +33,14 @@ async function main() {
       case 'directory':
       case 'folder':
         const filePath = process.env.DATA_PATH || process.env.FILE_PATH || './data';
+        const watchEnabled = process.env.WATCH !== 'false'; // Enable by default
         dataSource = createDataSource('file', {
           path: filePath,
           recursive: process.env.RECURSIVE === 'true',
-          chunkSize: parseInt(process.env.CHUNK_SIZE) || 1000
+          chunkSize: parseInt(process.env.CHUNK_SIZE) || 1000,
+          watch: watchEnabled
         });
-        console.log(`📁 Data source: Files (${filePath})`);
+        console.log(`📁 Data source: Files (${filePath})${watchEnabled ? ' [auto-refresh]' : ''}`);
         break;
 
       case 'csv':
@@ -114,6 +116,20 @@ async function main() {
     console.log(`\n📊 Loaded ${ragEngine.getStats().documentCount} documents`);
     console.log(`🤖 LLM Model: ${ragEngine.llm.model}`);
     console.log(`🎯 Top-K: ${topK}\n`);
+
+    // Start file watching if enabled
+    if (dataSource.startWatching && dataSource.watch) {
+      dataSource.onRefresh = async (docCount, eventType, filePath) => {
+        // Refresh the RAG engine's vector index
+        try {
+          await ragEngine.refresh();
+          console.log(`🔄 RAG index rebuilt with ${ragEngine.getStats().documentCount} documents`);
+        } catch (error) {
+          console.error('Error refreshing RAG index:', error.message);
+        }
+      };
+      await dataSource.startWatching();
+    }
 
     // Start server
     const server = await startServer(app, port, host);
