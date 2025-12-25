@@ -204,29 +204,77 @@ export class Guardrails {
   checkContentModeration(text) {
     const lowerText = text.toLowerCase();
     
-    // Check for explicit content
+    // Check for explicit content (more specific patterns to avoid false positives)
     if (this.policies.contentModeration.blockExplicit) {
-      const explicitTerms = ['explicit', 'nsfw', 'adult content'];
-      for (const term of explicitTerms) {
-        if (lowerText.includes(term)) {
+      // Check for explicit sexual content patterns, not just the word "explicit"
+      const explicitPatterns = [
+        /\bnsfw\b/i,
+        /\badult\s+content\b/i,
+        /\bexplicit\s+sexual\b/i,
+        /\bexplicit\s+material\b/i,
+        /\bpornographic\b/i
+      ];
+      
+      for (const pattern of explicitPatterns) {
+        if (pattern.test(lowerText)) {
           return {
             allowed: false,
             reason: 'Response contains inappropriate content'
           };
         }
       }
+      
+      // Allow "explicitly" in educational contexts (common in ML/tech)
+      // Only block if it's clearly about explicit content
+      if (lowerText.includes('explicit') && 
+          !lowerText.includes('explicitly') && 
+          !lowerText.includes('explicitly programmed') &&
+          !lowerText.includes('explicitly stated') &&
+          !lowerText.includes('explicitly defined')) {
+        // Check if it's in a problematic context
+        const problematicContexts = ['explicit content', 'explicit material', 'explicit images'];
+        for (const context of problematicContexts) {
+          if (lowerText.includes(context)) {
+            return {
+              allowed: false,
+              reason: 'Response contains inappropriate content'
+            };
+          }
+        }
+      }
     }
 
-    // Check for violence
+    // Check for violence (more context-aware)
     if (this.policies.contentModeration.blockViolence) {
-      const violenceTerms = ['kill', 'murder', 'violence', 'harm', 'attack'];
-      for (const term of violenceTerms) {
-        if (lowerText.includes(term) && lowerText.length < 500) {
-          // Only block if it's a short response (likely not educational)
+      // Only check for violence in clearly problematic contexts
+      const violencePatterns = [
+        /\bkill\s+(yourself|himself|herself|themselves)\b/i,
+        /\bmurder\s+(someone|people|person)\b/i,
+        /\bviolence\s+against\b/i,
+        /\bharm\s+(yourself|himself|herself|themselves|others)\b/i,
+        /\battack\s+(someone|people|person)\b/i
+      ];
+      
+      for (const pattern of violencePatterns) {
+        if (pattern.test(lowerText)) {
           return {
             allowed: false,
             reason: 'Response may contain violent content'
           };
+        }
+      }
+      
+      // Allow educational mentions of violence/harm in longer, educational contexts
+      // Block only if it's a short response with direct violence terms
+      if (lowerText.length < 200) {
+        const directViolenceTerms = ['kill yourself', 'murder someone', 'attack people'];
+        for (const term of directViolenceTerms) {
+          if (lowerText.includes(term)) {
+            return {
+              allowed: false,
+              reason: 'Response may contain violent content'
+            };
+          }
         }
       }
     }
