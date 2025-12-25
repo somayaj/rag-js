@@ -406,6 +406,43 @@ DATASOURCE_TYPE=file
 DATA_PATH=./data
 RECURSIVE=false
 CHUNK_SIZE=1000
+WATCH=true
+```
+
+### Auto-Refresh (File Watching)
+
+The server automatically watches for file changes and refreshes the index:
+
+```bash
+# Enabled by default
+DATASOURCE_TYPE=file DATA_PATH=./data npm start
+
+# Disable auto-refresh
+WATCH=false npm start
+```
+
+When files are added, changed, or deleted:
+```
+📁 File added: newfile.txt, refreshing index...
+✅ Index refreshed: 100 → 101 documents
+🔄 RAG index rebuilt with 101 documents
+```
+
+**Programmatic usage:**
+```javascript
+import { FileDataSource } from 'rag-groq';
+
+const dataSource = new FileDataSource({
+  path: './data',
+  watch: true,                    // Enable file watching
+  watchDebounce: 2000,            // Wait 2s before refresh (handles batch changes)
+  onRefresh: (docCount, event, file) => {
+    console.log(`Refreshed: ${docCount} documents after ${event} on ${file}`);
+  }
+});
+
+await dataSource.initialize();
+await dataSource.startWatching();  // Start watching for changes
 ```
 
 ### CSV
